@@ -218,6 +218,68 @@ static int mp4_inode_init_security(struct inode *inode, struct inode *dir,
 	 * Add your code here
 	 * ...
 	 */
+	int task_sid = current_cred()->mp4_flags; //how to get the current task's security blob: current_cred()?
+	char *name_ptr, *value_ptr = 0
+
+	if(!inode || !dir) {
+		return -EOPNOTSUPP;
+	}
+
+	// put the attribute name
+	name_ptr = kstrdup(XATTR_MP4_SUFFIX, GFP_KERNEL);
+	if(!name_ptr) {
+		return -ENOMEM;
+	}
+	*name = name_ptr;
+
+	// put the value and length
+	if(task_sid == MP4_TARGET_SID) {
+		//put length
+		*len = 6;
+		//put value
+		valuep = kstrdup("target", GFP_KERNEL);
+		//error handling
+		if (!valuep) {
+			return -ENOMEM;
+		}
+		*value = valuep;
+	} else {
+		return -EOPNOTSUPP;
+	}
+
+	// switch(task_sid) {
+	// 	case MP4_READ_OBJ:
+	// 		valuep = kstrdup("read-only", GFP_KERNEL);
+	// 		*len = 9;
+	// 		break;
+	// 	case MP4_READ_WRITE:
+	// 		valuep = kstrdup("read-write", GFP_KERNEL);
+	// 		*len = 10;
+	// 		break;
+	// 	case MP4_EXEC_OBJ:
+	// 		valuep = kstrdup("exec", GFP_KERNEL);
+	// 		*len = 4;
+	// 		break;
+	// 	case MP4_TARGET_SID:
+	// 		valuep = kstrdup("target", GFP_KERNEL);
+	// 		*len = 6;
+	// 		break;
+	// 	case MP4_WRITE_OBJ:
+	// 		valuep = kstrdup("write-only", GFP_KERNEL);
+	// 		*len = 10;
+	// 		break;
+	// 	case MP4_READ_DIR:
+	// 		valuep = kstrdup("dir", GFP_KERNEL);
+	// 		*len = 3;
+	// 		break;
+	// 	case MP4_RW_DIR:
+	// 		valuep = kstrdup("dir-write", GFP_KERNEL);
+	// 		*len = 9;
+	// 		break;
+	// 	default:
+	// 		break
+	// }
+
 	return 0;
 }
 
