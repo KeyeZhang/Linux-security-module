@@ -34,7 +34,7 @@
  * @mp4_flags: the sid values specific to an object/task
  */
 struct mp4_security {
-	int mp4_flags;
+	int mp4_flags; //sid
 	/* add any supporting definitions here if needed
 	 * ...
 	 */

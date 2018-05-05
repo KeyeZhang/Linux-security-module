@@ -1,4 +1,5 @@
 #define pr_fmt(fmt) "cs423_mp4: " fmt
+#define XATTR_MP4_SUFFIX "sample_filename"	//???????
 
 #include <linux/lsm_hooks.h>
 #include <linux/security.h>
@@ -23,7 +24,75 @@ static int get_inode_sid(struct inode *inode)
 	 * Add your code here
 	 * ...
 	 */
-	return 0;
+	struct dentry *dentry;
+	dentry = d_find_alias(inode);
+	return get_inode_sid_by_dentry(dentry, inode);
+	//dput(struct dentry * dentry);
+
+	//return 0;
+}
+
+static int get_inode_sid_by_dentry(struct dentry *dentry, struct inode *inode)
+{
+	int size;
+	int ret;
+	char *cred_ctx;
+	int sid;
+
+	//error handling 1
+	if (!inode->i_op->getxattr) {
+		return MP4_NO_ACCESS;
+	}
+	//error handling 2
+	if (!dentry) {
+		return MP4_NO_ACCESS;
+	}
+
+
+	size = 128;
+	cred_ctx = kmalloc(size, GFP_KERNEL);
+	if(!cred_ctx) {
+		dput(dentry);
+		return MP4_NO_ACCESS;
+	}
+
+	//first time get xattr and error handling
+	ret = getxattr(dentry, XATTR_MP4_SUFFIX, cred_ctx, size);
+	size = ret;
+	if(ret == -ERANGE) {
+		//buffer overflows, should query the correct buffer size
+		kfree(cred_ctx);
+		ret = getxattr(dentry, XATTR_MP4_SUFFIX, NULL, 0);
+		//queried size even < 0, error, terminate.
+		if(ret < 0) {
+			dput(dentry);
+			return MP4_NO_ACCESS;
+		}
+
+		//update the size by the newly queried correct size
+		size = ret;
+		cred_ctx = kmalloc(size, GFP_KERNEL);
+		if(!cred_ctx) {
+			dput(dentry);
+			return MP4_NO_ACCESS;
+		}
+		//second time get xattr and error handling
+		ret = getxattr(dentry, XATTR_MP4_SUFFIX, cred_ctx, size);
+	}
+
+	if(ret < 0) {
+		dput(dentry);
+		kfree(cred_ctx);
+		return MP4_NO_ACCESS;
+	} else {
+		dput(dentry);
+		kfree(cred_ctx);
+		cred_ctx[size] = '\0';
+		sid = __cred_ctx_to_sid(cred_ctx);
+	}
+
+	return sid;
+
 }
 
 /**
@@ -33,12 +102,27 @@ static int get_inode_sid(struct inode *inode)
  *
  * returns 0 on success.
  */
+
+ //This hook is responsible for setting the credentials cred_ctx (and thus our subjective security blob) for each process that is launched from a given binary file.
 static int mp4_bprm_set_creds(struct linux_binprm *bprm)
 {
-	/*
-	 * Add your code here
-	 * ...
-	 */
+
+	//const char * fileName = bprm -> filename;
+	struct inode * inode = bprm->file->f_inode;
+
+	//getting dentry: d_find_alias(bprm->file->f_inode)?
+
+	//1.read the xattr value of the inode used to create the process
+	//https://piazza.com/class/jcgqvneo9tn1o0?cid=460
+	//read the xattr value of the inode, get the label out of it
+	int osid = get_inode_sid(inode);
+
+	//2.if that labels reads MP4 TARGET SID
+	//you should set the created task’s blob to MP4 TARGET SID as well.
+	if (osid == MP4_TARGET_SID) {
+		current_cred()->security = (void *)osid;
+	}
+
 	return 0;
 }
 
@@ -49,10 +133,17 @@ static int mp4_bprm_set_creds(struct linux_binprm *bprm)
  * @gfp: the atomicity of the memory allocation
  *
  */
+
+ //In Linux, all of a task’s credentials are held in (uid, gid) or through (groups, keys, LSM security) a refcounted structure of type ‘struct cred’. Each task points to its credentials by a pointer called ‘cred’ in its task_struct.
+
 static int mp4_cred_alloc_blank(struct cred *cred, gfp_t gfp)
 {
+	 if(!cred){
+		 return -ENOMEM;
+	 }
      //Add your code here
-	 struct mp4_security * my_security_blob = (struct mp4_security *)kmalloc(sizeof(struct mp4_security), gfp);
+	 struct mp4_security * my_security_blob;
+	 my_security_blob = (struct mp4_security *)kmalloc(sizeof(struct mp4_security), gfp);
 	 //initialized label should always be MP4_NO_ACCESS
 	 my_security_blob -> mp4_flags = MP4_NO_ACCESS;
 	 //hook the void pointer from cred to the new security blob we created
@@ -87,7 +178,13 @@ static void mp4_cred_free(struct cred *cred)
 static int mp4_cred_prepare(struct cred *new, const struct cred *old,
 			    gfp_t gfp)
 {
-	new = (struct cred *)kmalloc(sizeof(struct cred), gfp);
+	//err handling
+	if(!old) {
+		return -ENOMEM;
+	}
+
+	memcpy(new, old, sizeof(struct cred));
+	//new = (struct cred *)kmalloc(sizeof(struct cred), gfp);
 	new -> mp4_flags = old -> mp4_flags;
 	return 0;
 }
@@ -105,6 +202,14 @@ static int mp4_cred_prepare(struct cred *new, const struct cred *old,
  * returns 0 if all goes well, -ENOMEM if no memory, -EOPNOTSUPP to skip
  *
  */
+
+ /*
+ 	This hook is responsible for setting the xattr of a newly created inode.
+    This value will depend on whether the task that creates this inode has the target sid or not:
+    1. For those inodes that were created by a target process, they should always be labeled with the read-write attribute.
+    2. For all other inodes, you should not set any xattr value.
+*/
+
 static int mp4_inode_init_security(struct inode *inode, struct inode *dir,
 				   const struct qstr *qstr,
 				   const char **name, void **value, size_t *len)
