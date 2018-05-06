@@ -1,5 +1,4 @@
 #define pr_fmt(fmt) "cs423_mp4: " fmt
-#define XATTR_MP4_SUFFIX "sample_filename"	//???????
 
 #include <linux/lsm_hooks.h>
 #include <linux/security.h>
@@ -120,7 +119,14 @@ static int mp4_bprm_set_creds(struct linux_binprm *bprm)
 	//2.if that labels reads MP4 TARGET SID
 	//you should set the created task’s blob to MP4 TARGET SID as well.
 	if (osid == MP4_TARGET_SID) {
-		current_cred()->security = (void *)osid;
+		if (!(bprm -> cred)) {
+			return -ENOMEM;
+		}
+		if(!(bprm -> cred -> security)) {
+			return -ENOMEM;
+		}
+		bprm -> cred -> security -> mp4_flags = osid
+		//current_cred()->security->mp4_flags = osid;
 	}
 
 	return 0;
@@ -144,10 +150,14 @@ static int mp4_cred_alloc_blank(struct cred *cred, gfp_t gfp)
      //Add your code here
 	 struct mp4_security * my_security_blob;
 	 my_security_blob = (struct mp4_security *)kmalloc(sizeof(struct mp4_security), gfp);
+	 if(!my_security_blob) {
+		 return -ENOMEM;
+	 }
 	 //initialized label should always be MP4_NO_ACCESS
 	 my_security_blob -> mp4_flags = MP4_NO_ACCESS;
 	 //hook the void pointer from cred to the new security blob we created
 	 cred -> security = my_security_blob;
+	 pr_info("1ST HOOK: mp4_cred_alloc_blank succeeds!");
 	 return 0;
 }
 
@@ -164,7 +174,17 @@ static void mp4_cred_free(struct cred *cred)
 	 * Add your code here
 	 * ...
 	 */
-	 kfree(cred);
+	 struct mp4_security * curr_blob = cred->security;
+
+	 /*
+	  * cred->security == NULL if security_cred_alloc_blank() or
+	  * security_prepare_creds() returned an error.
+	  */
+	 BUG_ON(cred->security && (unsigned long) cred->security < PAGE_SIZE);
+	 cred->security = (void *) 0x7UL;
+	 kfree(curr_blob);
+
+	 pr_info("2ND HOOK: mp4_cred_free succeeds!");
 }
 
 /**
@@ -178,15 +198,30 @@ static void mp4_cred_free(struct cred *cred)
 static int mp4_cred_prepare(struct cred *new, const struct cred *old,
 			    gfp_t gfp)
 {
-	//err handling
-	if(!old) {
-		return -ENOMEM;
-	}
+	const struct mp4_security *old_blob;
+	struct mp4_security * new_blob;
 
-	memcpy(new, old, sizeof(struct cred));
-	//new = (struct cred *)kmalloc(sizeof(struct cred), gfp);
-	new -> mp4_flags = old -> mp4_flags;
+	old_blob = old->security;
+
+	new_blob = kmemdup(old_blob, sizeof(struct mp4_security), gfp);
+	if (!new_blob)
+		return -ENOMEM;
+
+	new->security = new_blob;
+
+	pr_info("3RD HOOK: mp4_cred_prepare succeeds!");
+
 	return 0;
+
+	// //err handling
+	// if(!old) {
+	// 	return -ENOMEM;
+	// }
+	//
+	// memcpy(new, old, sizeof(struct cred));
+	// //new = (struct cred *)kmalloc(sizeof(struct cred), gfp);
+	// new -> mp4_flags = old -> mp4_flags;
+	// return 0;
 }
 
 /**
@@ -210,6 +245,9 @@ static int mp4_cred_prepare(struct cred *new, const struct cred *old,
     2. For all other inodes, you should not set any xattr value.
 */
 
+//https://piazza.com/class/jcgqvneo9tn1o0?cid=418
+//https://elixir.bootlin.com/linux/v4.3/source/include/linux/lsm_hooks.h#L168
+
 static int mp4_inode_init_security(struct inode *inode, struct inode *dir,
 				   const struct qstr *qstr,
 				   const char **name, void **value, size_t *len)
@@ -218,7 +256,7 @@ static int mp4_inode_init_security(struct inode *inode, struct inode *dir,
 	 * Add your code here
 	 * ...
 	 */
-	int task_sid = current_cred()->mp4_flags; //how to get the current task's security blob: current_cred()?
+	int task_sid = current_cred()->security->mp4_flags; //how to get the current task's security blob: current_cred()?
 	char *name_ptr, *value_ptr = 0
 
 	if(!inode || !dir) {
@@ -226,6 +264,7 @@ static int mp4_inode_init_security(struct inode *inode, struct inode *dir,
 	}
 
 	// put the attribute name
+	// use kmalloc?
 	name_ptr = kstrdup(XATTR_MP4_SUFFIX, GFP_KERNEL);
 	if(!name_ptr) {
 		return -ENOMEM;
@@ -283,6 +322,30 @@ static int mp4_inode_init_security(struct inode *inode, struct inode *dir,
 	return 0;
 }
 
+
+static int has_perm(int ssid, int osid, int mask)
+{
+	/* YOUR CODE: CW-Lite Authorization Rules */
+        if (ssid && osid) {
+		/* Block untrusted process from modifying trusted object */
+		if (((mask & MAY_WRITE) > 0 || (v & MAY_APPEND) > 0) &&
+			ssid == SAMPLE_UNTRUSTED && osid == SAMPLE_TRUSTED)
+			return BIBA_NO_WRITE_UP; // Block
+
+		/* Block trusted process from reading untrusted object when CWL is OFF */
+		if (((mask & MAY_READ) > 0 || (mask & MAY_EXEC) > 0) && cwl == 0 &&
+			ssid == SAMPLE_TRUSTED && osid == SAMPLE_UNTRUSTED)
+			return NO_CWL_NO_READ_DOWN; // Block
+
+		/* Allow all other operations */
+		return ALLOW_OP;
+	}
+        /* Other processes - allow */
+        else return 0;
+
+	return -9;  /* should not get here */
+}
+
 /**
  * mp4_has_permission - Check if subject has permission to an object
  *
@@ -293,13 +356,35 @@ static int mp4_inode_init_security(struct inode *inode, struct inode *dir,
  * returns 0 is access granter, -EACCES otherwise
  *
  */
+
 static int mp4_has_permission(int ssid, int osid, int mask)
 {
-	/*
+    /*
 	 * Add your code here
 	 * ...
 	 */
-	return 0;
+	//int rtn = 0;
+
+    /* YOUR CODE: CW-Lite Authorization Rules */
+	if (ssid && osid) {
+		/* Block untrusted process from modifying trusted object */
+		if (((mask & MAY_WRITE) > 0 || (v & MAY_APPEND) > 0) &&
+			ssid == SAMPLE_UNTRUSTED && osid == SAMPLE_TRUSTED)
+			return BIBA_NO_WRITE_UP; // Block
+
+		/* Block trusted process from reading untrusted object when CWL is OFF */
+		if (((mask & MAY_READ) > 0 || (mask & MAY_EXEC) > 0) && cwl == 0 &&
+			ssid == SAMPLE_TRUSTED && osid == SAMPLE_UNTRUSTED)
+			return NO_CWL_NO_READ_DOWN; // Block
+
+		/* Allow all other operations */
+		return ALLOW_OP;
+    }
+	/* Other processes - allow */
+	else return 0;
+
+	return -9;  /* should not get here */
+
 }
 
 /**
@@ -313,13 +398,80 @@ static int mp4_has_permission(int ssid, int osid, int mask)
  * returns 0 if access is granted, -EACCES otherwise
  *
  */
+
+ //For those programs that are not labeled as target
+ //our module will allow them full access to directories (regardless of the directories’ security labels), //and will allow them read-only access to files that have been assigned one of our custom labels. 
+
 static int mp4_inode_permission(struct inode *inode, int mask)
 {
 	/*
 	 * Add your code here
 	 * ...
 	 */
-	return 0;
+	 struct dentry *dentry = (struct dentry *)NULL;
+	 char *dir;
+	 char *buf;
+	 int ret;
+	 int len = 128;
+
+	 if (!mask) {
+		 return 0;
+	 }
+
+	 // Your code MUST first obtain the path of the inode being checked, and then use the helper function to skip over certain paths heavily used during boot time.
+
+	 //get the dir name by using dentry
+	 dentry = d_find_alias(inode);
+	 if(!dentry) {
+		 return -EACCES;
+	 }
+
+	 buf = kmalloc(len, GFP_KERNEL);
+	 if(!buf) {
+		 dput(dentry)
+		 return -EACCES;
+	 }
+
+     buf = memset(buf, '\0', len);
+	 dir = d_path(dentry, buf, len-1);
+
+	 //should skip path
+	 if (dir && mp4_should_skip_path(dir)) {
+		 dput(dentry);
+		 kfree(buf);
+	 	 return 0; //TODO: skip is granted or no access?
+	 }
+
+
+	//  /* get the dentry for inode_has_perm */
+	//  if ( nd ) {
+	// 	 dentry = nd->dentry;
+	//  }
+
+	// #if 0
+	// #endif
+
+	 if (!current_cred()->security ) {  // ssid
+		 return NONACCESS;
+	 }
+	 int ssid = current_cred()->security->mp4_flags;
+	 int osid = get_inode_sid(inode);
+
+	 ret = mp4_has_permission(ssid, osid, mask);
+
+	 /* Then, use this code to print relevant denials: for our processes or on our objects */
+ 	if (( ssid && osid ) && ret ) {
+ 		pr_info("%s: task ssid: %d, NOT authorized, for inode osid: %d.\n", ssid, osid);
+ 	}
+
+ 	/* Then, use this code to print relevant authorizations: for our processes */
+ 	if (( ssid && osid ) && !ret) {
+ 		pr_info("%s: task ssid: %d, Authorized, for inode osid: %d.\n", ssid, osid);
+ 	}
+
+	 //TODO:change to return ret
+	 return 0; /* permissive */
+
 }
 
 
