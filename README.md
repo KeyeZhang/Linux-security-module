@@ -66,7 +66,9 @@ If the path is not skipped, then we get the sid and oid, and pass into the funct
 After get the return value `ret` back. We `pr_info` those attempt which just got denied.
 
 `dmesg` screenshot: Compilation of the 6th hooks:
+
 ![picture](6th hook_1.png)
+
 ![picture](6th hook_2.png)
 
 
