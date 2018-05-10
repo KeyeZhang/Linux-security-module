@@ -94,9 +94,11 @@ Then unloaded the script by `source test.perm.unload`
 Change the `read-only` tag from `test.perm.unload`'s last line to `write-only`, run the test again.
 
 
-### For partial credit in case of am incomplete submission, include your test policy files and describe where your implementation works and where it does not.
-
-
 ### Provide details about the least privilege policy for /usr/bin/passwd and whether your module was able to correctly implement it.
+Create a dummy user: `useradd -M -s /bin/false dummyuser`
+Change its password: `sudo passwd dummyuser`
+Strace the information during the updating of the password: `sudo strace -o  -e trace=file sudo passwd dummyuser`
+Used a python script to extract the least policy by ingoring the path including `"dev", "proc", "lib", "events", "mnt", "run", "lvm", "conf", "usr", "bin", "/"]`
+The results is stored in `mp4_policy.txt`, `mp4_policy_after_extraction.txt`, `passwd.perm`
 
 Haven't implemented the last step where we use the module to enforce the policy for /usr/bin/passwd.

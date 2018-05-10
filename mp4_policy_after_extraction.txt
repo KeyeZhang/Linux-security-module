@@ -1,0 +1,80 @@
+open(/etc/ld.so.cache, O_RDONLY|O_CLOEXEC) = 3
+open(/etc/localtime, O_RDONLY|O_CLOEXEC) = 3
+open(/etc/nsswitch.conf, O_RDONLY|O_CLOEXEC) = 3
+open(/etc/ld.so.cache, O_RDONLY|O_CLOEXEC) = 3
+open(/etc/ld.so.cache, O_RDONLY|O_CLOEXEC) = 3
+open(/etc/passwd, O_RDONLY|O_CLOEXEC) = 3
+getcwd(/home/keyez2, 4096)            = 13
+open(/etc/ld.so.cache, O_RDONLY|O_CLOEXEC) = 3
+open(/etc/passwd, O_RDONLY|O_CLOEXEC) = 3
+open(/etc/default/nss, O_RDONLY|O_CLOEXEC) = 4
+open(/etc/group, O_RDONLY|O_CLOEXEC)  = 4
+open(/etc/passwd, O_RDONLY|O_CLOEXEC) = 5
+open(/etc/group, O_RDONLY|O_CLOEXEC)  = 5
+open(/etc/nsswitch.conf, O_RDONLY)    = 5
+stat(/etc/sudoers, {st_mode=S_IFREG|0600, st_size=4108, ...}) = 0
+open(/etc/sudoers, O_RDONLY)          = 5
+stat(/etc/sudoers.d, {st_mode=S_IFDIR|0755, st_size=20, ...}) = 0
+open(/etc/sudoers.d, O_RDONLY|O_NONBLOCK|O_DIRECTORY|O_CLOEXEC) = 6
+stat(/etc/sudoers.d/README, {st_mode=S_IFREG|0440, st_size=958, ...}) = 0
+stat(/etc/sudoers.d/README, {st_mode=S_IFREG|0440, st_size=958, ...}) = 0
+open(/etc/sudoers.d/README, O_RDONLY) = 6
+open(/etc/host.conf, O_RDONLY|O_CLOEXEC) = 6
+open(/etc/resolv.conf, O_RDONLY|O_CLOEXEC) = 6
+open(/etc/hosts, O_RDONLY|O_CLOEXEC)  = 6
+stat(/etc/pam.d, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+open(/etc/pam.d/sudo, O_RDONLY)       = 8
+stat(/etc/pam.d, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+open(/etc/pam.d/common-auth, O_RDONLY) = 9
+open(/etc/ld.so.cache, O_RDONLY|O_CLOEXEC) = 10
+open(/etc/ld.so.cache, O_RDONLY|O_CLOEXEC) = 10
+open(/etc/ld.so.cache, O_RDONLY|O_CLOEXEC) = 10
+stat(/etc/pam.d, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+open(/etc/pam.d/common-account, O_RDONLY) = 9
+stat(/etc/pam.d, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+open(/etc/pam.d/common-session-noninteractive, O_RDONLY) = 9
+open(/etc/pam.d/other, O_RDONLY)      = 8
+stat(/etc/pam.d, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+open(/etc/pam.d/common-auth, O_RDONLY) = 9
+stat(/etc/pam.d, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+open(/etc/pam.d/common-account, O_RDONLY) = 9
+stat(/etc/pam.d, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+open(/etc/pam.d/common-password, O_RDONLY) = 9
+open(/etc/ld.so.cache, O_RDONLY|O_CLOEXEC) = 11
+stat(/etc/pam.d, {st_mode=S_IFDIR|0755, st_size=4096, ...}) = 0
+open(/etc/pam.d/common-session, O_RDONLY) = 9
+open(/etc/ld.so.cache, O_RDONLY|O_CLOEXEC) = 12
+open(/etc/passwd, O_RDONLY|O_CLOEXEC) = 8
+open(/etc/ld.so.cache, O_RDONLY|O_CLOEXEC) = 8
+open(/var/lib/sss/mc/passwd, O_RDONLY|O_CLOEXEC) = 8
+open(/etc/group, O_RDONLY|O_CLOEXEC)  = 9
+open(/var/lib/sss/mc/initgroups, O_RDONLY|O_CLOEXEC) = 9
+open(/etc/group, O_RDONLY|O_CLOEXEC)  = 12
+open(/var/lib/sss/mc/group, O_RDONLY|O_CLOEXEC) = 12
+open(/etc/group, O_RDONLY|O_CLOEXEC)  = 13
+open(/etc/group, O_RDONLY|O_CLOEXEC)  = 13
+getcwd(/home/keyez2, 4096)            = 13
+open(/etc/passwd, O_RDONLY|O_CLOEXEC) = 4
+open(/etc/group, O_RDONLY|O_CLOEXEC)  = 11
+open(/etc/passwd, O_RDONLY|O_CLOEXEC) = 13
+open(/etc/passwd, O_RDONLY|O_CLOEXEC) = 4
+stat(/etc/krb5.conf, {st_mode=S_IFREG|0644, st_size=5192, ...}) = 0
+open(/etc/krb5.conf, O_RDONLY)        = 13
+open(/etc/passwd, O_RDONLY|O_CLOEXEC) = 13
+open(/etc/security/pam_env.conf, O_RDONLY) = 13
+open(/etc/environment, O_RDONLY)      = 13
+open(/etc/security/pam_env.conf, O_RDONLY) = 13
+open(/etc/default/locale, O_RDONLY)   = 13
+open(/etc/login.defs, O_RDONLY)       = 13
+open(/etc/login.defs, O_RDONLY)       = 13
+open(/etc/passwd, O_RDONLY|O_CLOEXEC) = 13
+stat(/etc/krb5.conf, {st_mode=S_IFREG|0644, st_size=5192, ...}) = 0
+open(/etc/krb5.conf, O_RDONLY)        = 13
+open(/etc/passwd, O_RDONLY|O_CLOEXEC) = 13
+open(/etc/login.defs, O_RDONLY)       = 13
+open(/var/run/utmp, O_RDONLY|O_CLOEXEC) = 13
+stat(/etc/krb5.conf, {st_mode=S_IFREG|0644, st_size=5192, ...}) = 0
+open(/etc/krb5.conf, O_RDONLY)        = 11
+open(/etc/login.defs, O_RDONLY)       = 11
+stat(/etc/krb5.conf, {st_mode=S_IFREG|0644, st_size=5192, ...}) = 0
+open(/etc/krb5.conf, O_RDONLY)        = 11
