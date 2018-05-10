@@ -188,8 +188,8 @@ static int mp4_cred_alloc_blank(struct cred *cred, gfp_t gfp)
 
 	 //pr_info("1ST HOOK: mp4_cred_alloc_blank succeeds!");
 	//  if(printk_ratelimit()) {
- // 		pr_info("1ST HOOK: mp4_cred_alloc_blank succeeds!");
- // 	 }
+ 	// 		pr_info("1ST HOOK: mp4_cred_alloc_blank succeeds!");
+ 	// 	 }
 
 	 return 0;
 }
@@ -334,7 +334,6 @@ static int mp4_inode_init_security(struct inode *inode, struct inode *dir,
 	//    pr_info("5th HOOK: mp4, the current task sid is %d", task_sid);
 	// }
 
-	// I use inode param to check if inode is directory or not and write dir-write if directory read-write otherwise. Containing directory param is unused for me.
 
 	// put the value and length
 	if(task_sid == MP4_TARGET_SID) {
@@ -393,7 +392,7 @@ static int mp4_has_permission(int ssid, int osid, int mask)
 		return -EACCES;
 	}
 
-	//2.Can access the inode, allow access
+	//2.Can access the inode, check if access allowed
 	if(osid == MP4_READ_OBJ) {
 		if((mask & MAY_WRITE) > 0 || (mask & MAY_EXEC) > 0 ||    (mask & MAY_APPEND) > 0) {
 			return -EACCES;
@@ -463,11 +462,6 @@ static int mp4_inode_permission(struct inode *inode, int mask)
 		 return -EACCES;
 	 }
 
-	 //
-	//  if(printk_ratelimit()) {
-	// 	pr_info("6th HOOK: mp4, dentry exists.");
-	//  }
-
 	 //get the path for checking whether should skip them
 	 buf = kmalloc(len, GFP_KERNEL);
 	 if(!buf) {
@@ -498,9 +492,6 @@ static int mp4_inode_permission(struct inode *inode, int mask)
 
 	 //should skip path
 	 if (mp4_should_skip_path(dir)) {
-		 if(printk_ratelimit()) {
-			pr_info("6th HOOK: mp4, skip the path: %s", dir);
-		 }
 		 kfree(buf);
 		 if(dentry)
 		 	dput(dentry);
@@ -528,26 +519,18 @@ static int mp4_inode_permission(struct inode *inode, int mask)
 			 ret = 0;
 		 }
 	 }
-	 else
-	 	ret = -EACCES;
+	 else {
+		ret = 0;
+	 }
 
-	 //authorized = ret == 0 ? 1 : 0;
+
+	 authorized = ret == 0 ? 1 : 0;
 	 /* Then, use this code to print relevant denials: for our processes or on our objects */
 	 if(printk_ratelimit()) {
-	 	pr_info("Currently handling task ssid: %d, inode osid: %d. Authorized ? : 111.\n", ssid, osid);
+	 	pr_info("Currently handling task ssid: %d, inode osid: %d. Authorized ? : %d.\n", ssid, osid, authorized);
  	 }
- // 	if (( ssid && osid ) && ret ) {
-	// 	if(printk_ratelimit()) {
-	//  		pr_info("task ssid: %d, NOT authorized, for inode osid: %d.\n", ssid, osid);
-	// 	}
- // 	}
-	//
- // 	/* Then, use this code to print relevant authorizations: for our processes */
- // 	if (( ssid && osid ) && !ret) {
-	// 	if(printk_ratelimit()) {
-	//  		pr_info("task ssid: %d, Authorized, for inode osid: %d.\n", ssid, osid);
-	// 	}
- // 	}
+
+
  	 if(dentry)
 	 	dput(dentry);
 	 kfree(buf);
