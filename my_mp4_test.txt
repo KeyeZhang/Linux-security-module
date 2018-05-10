@@ -1,0 +1,3 @@
+1.Currently working as a teaching assistant for Programming Languages & Compilers(CS 421) with Prof. Mattox Beckman in Spring 2018 at UIUC.
+2.Holding office hours for answering student questions on course materialand machine problems,
+3.in-class activities maintaining and optimizing the PrairieLearn homework application for CS421.

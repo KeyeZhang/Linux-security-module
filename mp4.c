@@ -11,6 +11,7 @@
 #include <linux/xattr.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/printk.h>
 #include "mp4_given.h"
 
 /**
@@ -49,7 +50,8 @@ static int get_inode_sid(struct inode *inode)
 	size = 128;
 	cred_ctx = kmalloc(size, GFP_KERNEL);
 	if(!cred_ctx) {
-		dput(dentry);
+		if(dentry)
+			dput(dentry);
 		return MP4_NO_ACCESS;
 	}
 
@@ -63,7 +65,8 @@ static int get_inode_sid(struct inode *inode)
 		ret = inode->i_op->getxattr(dentry, XATTR_MP4_SUFFIX, NULL, 0);
 		//queried size even < 0, error, terminate.
 		if(ret < 0) {
-			dput(dentry);
+			if(dentry)
+				dput(dentry);
 			return MP4_NO_ACCESS;
 		}
 
@@ -71,22 +74,28 @@ static int get_inode_sid(struct inode *inode)
 		size = ret;
 		cred_ctx = kmalloc(size, GFP_KERNEL);
 		if(!cred_ctx) {
-			dput(dentry);
+			if(dentry)
+				dput(dentry);
 			return -ENOMEM;
 		}
 		//second time get xattr and error handling
 		ret = inode->i_op->getxattr(dentry, XATTR_MP4_SUFFIX, cred_ctx, size);
 	}
 
-	if(ret < 0) {
+	if(dentry)
 		dput(dentry);
+
+	if(ret < 0) {
 		kfree(cred_ctx);
 		return MP4_NO_ACCESS;
 	} else {
-		dput(dentry);
-		kfree(cred_ctx);
 		cred_ctx[size] = '\0';
 		sid = __cred_ctx_to_sid(cred_ctx);
+		kfree(cred_ctx);
+	}
+
+	if(printk_ratelimit()) {
+		pr_info("mp4: get node sid helper passed!");
 	}
 
 	return sid;
@@ -102,33 +111,49 @@ static int get_inode_sid(struct inode *inode)
  */
 
  //This hook is responsible for setting the credentials cred_ctx (and thus our subjective security blob) for each process that is launched from a given binary file.
+ //https://piazza.com/class/jcgqvneo9tn1o0?cid=566
 static int mp4_bprm_set_creds(struct linux_binprm *bprm)
 {
+	int osid;
+	struct inode * inode;
+	struct mp4_security * curr_blob;
 
 	//const char * fileName = bprm -> filename;
 	if(!bprm || !bprm->file || !bprm->file->f_inode){
 		return -ENOMEM;
 	}
-	struct inode * inode = bprm->file->f_inode;
+	inode = bprm->file->f_inode;
 
 	//getting dentry: d_find_alias(bprm->file->f_inode)?
 
 	//1.read the xattr value of the inode used to create the process
 	//https://piazza.com/class/jcgqvneo9tn1o0?cid=460
 	//read the xattr value of the inode, get the label out of it
-	int osid = get_inode_sid(inode);
+	osid = get_inode_sid(inode);
 
 	//2.if that labels reads MP4 TARGET SID
 	//you should set the created task’s blob to MP4 TARGET SID as well.
 	if (osid == MP4_TARGET_SID) {
 		if (!(bprm -> cred)) {
+			if(printk_ratelimit()) {
+				pr_info("bprm -> cred is NULL!");
+			}
 			return -ENOMEM;
 		}
 		if(!(bprm -> cred -> security)) {
+			//should allocate a new one????
+			if(printk_ratelimit()) {
+				pr_info("bprm -> cred -> security is NULL!");
+			}
 			return -ENOMEM;
 		}
-		bprm -> cred -> security -> mp4_flags = osid
+		curr_blob = bprm -> cred -> security;
+		curr_blob -> mp4_flags = osid;
 	}
+
+	// if(printk_ratelimit()) {
+	// 	pr_info("4th HOOK: mp4_bprm_set_creds succeeds!");
+	// }
 
 	return 0;
 }
@@ -145,12 +170,14 @@ static int mp4_bprm_set_creds(struct linux_binprm *bprm)
 
 static int mp4_cred_alloc_blank(struct cred *cred, gfp_t gfp)
 {
-	 if(!cred){
-		 return -ENOMEM;
-	 }
      //Add your code here
 	 struct mp4_security * my_security_blob;
-	 my_security_blob = kzalloc(sizeof(struct mp4_security), gfp);
+
+	 if(!cred){
+		return -ENOMEM;
+	}
+
+	 my_security_blob = (struct mp4_security *)kmalloc(sizeof(struct mp4_security), gfp);
 	 if(!my_security_blob) {
 		 return -ENOMEM;
 	 }
@@ -158,7 +185,12 @@ static int mp4_cred_alloc_blank(struct cred *cred, gfp_t gfp)
 	 my_security_blob -> mp4_flags = MP4_NO_ACCESS;
 	 //hook the void pointer from cred to the new security blob we created
 	 cred -> security = my_security_blob;
+
 	 //pr_info("1ST HOOK: mp4_cred_alloc_blank succeeds!");
+	//  if(printk_ratelimit()) {
+ // 		pr_info("1ST HOOK: mp4_cred_alloc_blank succeeds!");
+ // 	 }
+
 	 return 0;
 }
 
@@ -169,32 +201,33 @@ static int mp4_cred_alloc_blank(struct cred *cred, gfp_t gfp)
  * @cred: the credentials struct
  *
  */
+
+ //first three hook some ideas: https://piazza.com/class/jcgqvneo9tn1o0?cid=575
 static void mp4_cred_free(struct cred *cred)
 {
 	/*
 	 * Add your code here
 	 * ...
 	 */
-	 struct mp4_security * curr_blob;
+	 //struct mp4_security * curr_blob;
 
 	 if(!cred) {
-		 return -ENOMEM;
+		 return;
 	 }
 
-	 curr_blob = cred->security;
-
-	 if(!curr_blob) {
-		 return -ENOMEM;
+	 if(!cred->security) {
+		 return;
 	 }
 	 /*
 	  * cred->security == NULL if security_cred_alloc_blank() or
 	  * security_prepare_creds() returned an error.
 	  */
-	 BUG_ON(cred->security && (unsigned long) cred->security < PAGE_SIZE);
-	 cred->security = (void *) 0x7UL;
-	 kfree(curr_blob);
+	//  BUG_ON(cred->security && (unsigned long) cred->security < PAGE_SIZE);
 
-	 pr_info("2ND HOOK: mp4_cred_free succeeds!");
+	 kfree(cred->security);
+	 cred->security = NULL;
+
+	 //pr_info("3RD HOOK: mp4_cred_free succeeds!");
 }
 
 /**
@@ -205,31 +238,35 @@ static void mp4_cred_free(struct cred *cred)
  * @gfp: the atomicity of the memory allocation
  *
  */
-static int mp4_cred_prepare(struct cred *new, const struct cred *old,
-			    gfp_t gfp)
+static int mp4_cred_prepare(struct cred *new, const struct cred *old, gfp_t gfp)
 {
-	const struct mp4_security *old_blob;
+	struct mp4_security *old_blob;
 	struct mp4_security * new_blob;
 
-	if(!new || !old) {
+	if(!new) {
 		return -ENOMEM;
 	}
 
-	old_blob = old->security;
-	if(!old_blob) {
-		return -ENOMEM;
+	if(!old || !old->security){
+		new_blob = (struct mp4_security *)kmalloc(sizeof(struct mp4_security), gfp);
+		if(!new_blob) {
+			return -ENOMEM;
+		}
+		new_blob -> mp4_flags = MP4_NO_ACCESS;
+		new->security = new_blob;
+	} else {
+		old_blob = old->security;
+
+		// new_blob = kmemdup(old_blob, sizeof(struct mp4_security), gfp);
+		new_blob = (struct mp4_security *)kmalloc(sizeof(struct mp4_security), gfp);
+		if (!new_blob){
+			return -ENOMEM;
+		}
+		new_blob -> mp4_flags = old_blob -> mp4_flags;
+		new->security = new_blob;
 	}
 
-	new_blob = (struct mp4_security*)kmalloc(sizeof(struct mp4_security), gfp);
-	// new_blob = kmemdup(old_blob, sizeof(struct mp4_security), gfp);
-	if (!new_blob)
-		return -ENOMEM;
-
-	new_blob -> mp4_flags = old_blob -> mp4_flags;
-
-	new->security = new_blob;
-
-	//pr_info("3RD HOOK: mp4_cred_prepare succeeds!");
+	//pr_info("2ND hook: mp4_cred_prepare works!");
 
 	return 0;
 
@@ -256,6 +293,7 @@ static int mp4_cred_prepare(struct cred *new, const struct cred *old,
     2. For all other inodes, you should not set any xattr value.
 */
 
+//about "dir-write"
 //https://piazza.com/class/jcgqvneo9tn1o0?cid=418
 //https://elixir.bootlin.com/linux/v4.3/source/include/linux/lsm_hooks.h#L168
 
@@ -267,16 +305,21 @@ static int mp4_inode_init_security(struct inode *inode, struct inode *dir,
 	 * Add your code here
 	 * ...
 	 */
-	if(!current_cred() || !current_cred()->security){
-		return -ENOMEM;
-	}
+	struct mp4_security * curr_cred;
+	int task_sid;
+	char *name_ptr;
+	char *value_ptr;
 
-	int task_sid = current_cred()->security->mp4_flags; //how to get the current task's security blob: current_cred()?
-	char *name_ptr, *value_ptr;
+	if(!current_cred() || !current_cred()->security){
+		return -EOPNOTSUPP;
+	}
 
 	if(!inode || !dir) {
 		return -EOPNOTSUPP;
 	}
+
+	curr_cred = current_cred() -> security;
+	task_sid = curr_cred->mp4_flags; //how to get the current task's security blob: current_cred()?
 
 	// put the attribute name
 	// use kmalloc?
@@ -286,20 +329,46 @@ static int mp4_inode_init_security(struct inode *inode, struct inode *dir,
 	}
 	*name = name_ptr;
 
+	//intermediate check
+	// if(printk_ratelimit()) {
+	//    pr_info("5th HOOK: mp4, the current task sid is %d", task_sid);
+	// }
+
+	// I use inode param to check if inode is directory or not and write dir-write if directory read-write otherwise. Containing directory param is unused for me.
+
 	// put the value and length
 	if(task_sid == MP4_TARGET_SID) {
-		//put length
-		*len = 7;
-		//put value
-		valuep = kstrdup("target", GFP_KERNEL);
-		//error handling
-		if (!valuep) {
-			return -ENOMEM;
+		//if inode is a directory, set xattr to "dir-write", else set to "read-write"
+		if(S_ISDIR(inode->i_mode)) {
+			value_ptr = kstrdup("dir-write", GFP_KERNEL);
+			//error handling
+			if (!value_ptr) {
+				return -ENOMEM;
+			}
+			*value = value_ptr;
+
+			//put length
+			*len = 10;
+		} else {
+			//put value
+			value_ptr = kstrdup("read-write", GFP_KERNEL);
+			//error handling
+			if (!value_ptr) {
+				return -ENOMEM;
+			}
+			*value = value_ptr;
+
+			//put length
+			*len = 11;
 		}
-		*value = valuep;
+
 	} else {
 		return -EOPNOTSUPP;
 	}
+
+	// if(printk_ratelimit()) {
+	//    pr_info("5th HOOK: mp4_inode_init_security called!");
+	// }
 
 	return 0;
 }
@@ -310,7 +379,7 @@ static int mp4_inode_init_security(struct inode *inode, struct inode *dir,
  *
  * @ssid: the subject's security id
  * @osid: the object's security id
- * @mask: the operation mask
+ * @mask: the operation mask: Right to check for (%MAY_READ, %MAY_WRITE, %MAY_EXEC)
  *
  * returns 0 is access granter, -EACCES otherwise
  *
@@ -319,7 +388,34 @@ static int mp4_inode_init_security(struct inode *inode, struct inode *dir,
 static int mp4_has_permission(int ssid, int osid, int mask)
 {
 
-	return 0;  /* should not get here */
+	//1.Cannot access the inode
+	if(osid == MP4_NO_ACCESS) {
+		return -EACCES;
+	}
+
+	//2.Can access the inode, allow access
+	if(osid == MP4_READ_OBJ) {
+		if((mask & MAY_WRITE) > 0 || (mask & MAY_EXEC) > 0 ||    (mask & MAY_APPEND) > 0) {
+			return -EACCES;
+		}
+	}
+	else if(osid == MP4_READ_WRITE){
+		if((mask & MAY_EXEC) > 0) {
+			return -EACCES;
+		}
+	}
+	else if(osid == MP4_WRITE_OBJ ){
+		if((mask & MAY_READ) > 0 || (mask & MAY_EXEC) > 0) {
+			return -EACCES;
+		}
+	}
+	else if(osid == MP4_EXEC_OBJ ){
+		if((mask & MAY_WRITE) > 0 ||(mask & MAY_APPEND) > 0) {
+			return -EACCES;
+		}
+	}
+
+	return 0;
 
 }
 
@@ -341,11 +437,15 @@ static int mp4_has_permission(int ssid, int osid, int mask)
 static int mp4_inode_permission(struct inode *inode, int mask)
 {
 
-	 struct dentry *dentry = (struct dentry *)NULL;
+	 struct dentry *dentry;
+	 struct mp4_security *current_cred;
 	 char *dir;
 	 char *buf;
 	 int ret;
-	 int len = 128;
+	 int authorized;
+	 int ssid;
+	 int osid;
+	 int len = 256;
 
 	 if (!mask) {
 		 return 0;
@@ -353,48 +453,106 @@ static int mp4_inode_permission(struct inode *inode, int mask)
 
 	 // Your code MUST first obtain the path of the inode being checked, and then use the helper function to skip over certain paths heavily used during boot time.
 
-	 //get the dir name by using dentry
+	 //get the dentry for getting dir name
+	 if(!inode) {
+		 return -EACCES;
+	 }
+
 	 dentry = d_find_alias(inode);
 	 if(!dentry) {
 		 return -EACCES;
 	 }
 
+	 //
+	//  if(printk_ratelimit()) {
+	// 	pr_info("6th HOOK: mp4, dentry exists.");
+	//  }
+
+	 //get the path for checking whether should skip them
 	 buf = kmalloc(len, GFP_KERNEL);
 	 if(!buf) {
-		 dput(dentry)
+		 if(dentry)
+		 	dput(dentry);
 		 return -EACCES;
 	 }
 
-     buf = memset(buf, '\0', len);
-	 dir = d_path(dentry, buf, len-1);
+    //  buf = memset(buf, '\0', len);
+	//  if(!buf) {
+	// 	 if(dentry)
+	// 	 	dput(dentry);
+	// 	 return -EACCES;
+	//  }
+
+	 if(!dentry) {
+		 return -EACCES;
+	 }
+
+	 dir = dentry_path_raw(dentry, buf, len);
+
+	 if(!dir) {
+		 kfree(buf);
+		 if(dentry)
+		 	dput(dentry);
+		 return -EACCES;
+	 }
 
 	 //should skip path
-	 if (dir && mp4_should_skip_path(dir)) {
-		 dput(dentry);
+	 if (mp4_should_skip_path(dir)) {
+		 if(printk_ratelimit()) {
+			pr_info("6th HOOK: mp4, skip the path: %s", dir);
+		 }
 		 kfree(buf);
+		 if(dentry)
+		 	dput(dentry);
 	 	 return 0; //TODO: skip is granted or no access?
 	 }
 
-	 if (!current_cred()->security ) {  // ssid
-		 return NONACCESS;
+	 if (!current_cred() || !current_cred()->security) {  // ssid
+		 kfree(buf);
+		 if(dentry)
+		 	dput(dentry);
+		 return -EACCES;
 	 }
-	 int ssid = current_cred()->security->mp4_flags;
-	 int osid = get_inode_sid(inode);
 
-	 ret = mp4_has_permission(ssid, osid, mask);
+	 current_cred = current_cred()->security;
+	 ssid = current_cred -> mp4_flags;
+	 osid = get_inode_sid(inode);
 
+	 //Our Policy!
+	 if(ssid && osid ){
+		 if (ssid == MP4_TARGET_SID || (ssid != MP4_TARGET_SID && !S_ISDIR(inode->i_mode))) {
+			//Enter MAC policy!
+			ret = mp4_has_permission(ssid, osid, mask);
+		 }
+ 	  	 else { //task is not target, and the inode is directory
+			 ret = 0;
+		 }
+	 }
+	 else
+	 	ret = -EACCES;
+
+	 //authorized = ret == 0 ? 1 : 0;
 	 /* Then, use this code to print relevant denials: for our processes or on our objects */
- 	if (( ssid && osid ) && ret ) {
- 		pr_info("%s: task ssid: %d, NOT authorized, for inode osid: %d.\n", ssid, osid);
- 	}
-
- 	/* Then, use this code to print relevant authorizations: for our processes */
- 	if (( ssid && osid ) && !ret) {
- 		pr_info("%s: task ssid: %d, Authorized, for inode osid: %d.\n", ssid, osid);
- 	}
-
+	 if(printk_ratelimit()) {
+	 	pr_info("Currently handling task ssid: %d, inode osid: %d. Authorized ? : 111.\n", ssid, osid);
+ 	 }
+ // 	if (( ssid && osid ) && ret ) {
+	// 	if(printk_ratelimit()) {
+	//  		pr_info("task ssid: %d, NOT authorized, for inode osid: %d.\n", ssid, osid);
+	// 	}
+ // 	}
+	//
+ // 	/* Then, use this code to print relevant authorizations: for our processes */
+ // 	if (( ssid && osid ) && !ret) {
+	// 	if(printk_ratelimit()) {
+	//  		pr_info("task ssid: %d, Authorized, for inode osid: %d.\n", ssid, osid);
+	// 	}
+ // 	}
+ 	 if(dentry)
+	 	dput(dentry);
+	 kfree(buf);
 	 return ret; /* permissive */
-
+	 //return 0;
 }
 
 
@@ -428,7 +586,7 @@ static __init int mp4_init(void)
 	if (!security_module_enable("mp4"))
 		return 0;
 
-	pr_info("Mytest: mp4 LSM initializing..");
+	pr_info("Mytest for 1st-6th hooks: mp4 LSM initializing..");
 
 	/*
 	 * Register the mp4 hooks with lsm

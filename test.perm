@@ -1,0 +1,4 @@
+sudo setfattr -n security.mp4 -v target /bin/cat
+sudo setfattr -n security.mp4 -v dir /home
+sudo setfattr -n security.mp4 -v dir /home/keyez2
+sudo setfattr -n security.mp4 -v read-only /home/keyez2/my_mp4_test.txt
