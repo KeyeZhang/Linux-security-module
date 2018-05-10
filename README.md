@@ -53,7 +53,7 @@ For those inodes which are directories, we should allow the process to go on. Th
 ![picture](5th hook.png)
 
 #### 6.mp4_inode_permission
-This hook is partially implemented with the function `mp4_inode_permission` completed. The workflow of my code is as follow:
+This hook is partially implemented with the function `mp4_inode_permission` completed. The comparison between the mask and the label is in SeLinux style. The workflow of my code is as follow:
 
 First get dentry of the inode by using `d_find_alias(inode);`.Then, using `dentry_path_raw` function to get the path of that inode, by passing in the dentry and a buffer. The next step is to use the helper function `mp4_should_skip_path` to check if the path is the path that we should skip, if it return non-zero, we skip these paths by granting them access, and `dput` the dentry and free the buffer.
 
@@ -74,15 +74,23 @@ After get the return value `ret` back. We `pr_info` those attempt which just got
 
 I created two tests scripts called `test.perm` and `test.perm.unload` at the home directory:
 `test.perm`:
+
 `sudo setfattr -n security.mp4 -v target /bin/cat
+
  sudo setfattr -n security.mp4 -v dir /home
+
  sudo setfattr -n security.mp4 -v dir /home/keyez2
+
  sudo setfattr -n security.mp4 -v read-only /home/keyez2/my_mp4_test.txt`
 
 `test.perm.unload`:
-`sudo setfattr -x security.mp4 /bin/cat
+
+`sudo setfattr -x security.mp4 /bin/cat\
+
  sudo setfattr -x security.mp4 /home
+
  sudo setfattr -x security.mp4 /home/keyez2
+
  sudo setfattr -x security.mp4 /home/keyez2/my_mp4_test.txt`
 
 
@@ -96,9 +104,13 @@ Change the `read-only` tag from `test.perm.unload`'s last line to `write-only`, 
 
 ### Provide details about the least privilege policy for /usr/bin/passwd and whether your module was able to correctly implement it.
 Create a dummy user: `useradd -M -s /bin/false dummyuser`
+
 Change its password: `sudo passwd dummyuser`
+
 Strace the information during the updating of the password: `sudo strace -o  -e trace=file sudo passwd dummyuser`
+
 Used a python script to extract the least policy by ingoring the path including `"dev", "proc", "lib", "events", "mnt", "run", "lvm", "conf", "usr", "bin", "/"]`
+
 The results is stored in `mp4_policy.txt`, `mp4_policy_after_extraction.txt`, `passwd.perm`
 
 Haven't implemented the last step where we use the module to enforce the policy for /usr/bin/passwd.
